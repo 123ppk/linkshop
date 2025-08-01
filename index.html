@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OneLink Shop</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OneLink Shop with Firebase</title>
   <style>
     body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f4f7fa; }
     header { background: #111; color: white; padding: 1rem; text-align: center; font-size: 1.6rem; letter-spacing: 1px; }
@@ -19,30 +19,38 @@
     .hidden { display: none; }
     #whatsapp-share-btn { background: #25D366; color: white; margin-top: 15px; padding: 12px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
   </style>
+
+  <!-- Firebase SDK (only v9 compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
-<header>OneLink Shop</header>
+<header>OneLink Shop with Firebase</header>
 <div class="container">
   <div id="login">
     <h2>Login</h2>
-    <input type="email" id="email" placeholder="Email">
-    <input type="password" id="password" placeholder="Password">
+    <input type="email" id="email" placeholder="Email" />
+    <input type="password" id="password" placeholder="Password" />
     <button onclick="login()">Login</button>
     <p id="login-msg" style="color:red;"></p>
   </div>
+
   <div id="user-panel" class="hidden">
     <h2>Your Links</h2>
-    <input type="text" id="link-title" placeholder="Link Title">
-    <input type="url" id="link-url" placeholder="https://example.com">
+    <input type="text" id="link-title" placeholder="Link Title" />
+    <input type="url" id="link-url" placeholder="https://example.com" />
     <button onclick="addLink()">Add Link</button>
     <div id="links"></div>
-    <button onclick="logout(true)">Logout</button>
+    <button onclick="logout()">Logout</button>
   </div>
+
   <div id="admin-panel" class="hidden">
     <h2>Admin Panel</h2>
     <div id="admin-content"></div>
-    <button onclick="logout(false)">Logout</button>
+    <button onclick="logout()">Logout</button>
   </div>
+
   <div id="public-panel" class="hidden">
     <h2>Public Linktree</h2>
     <div id="public-links"></div>
@@ -50,139 +58,217 @@
     <button onclick="showLogin()">Back to Login</button>
   </div>
 </div>
+
 <script>
-const users = [
-  { email: 'user1@example.com', password: 'user123', role: 'user' },
-  { email: 'admin@example.com', password: 'admin123', role: 'admin' }
-];
-let currentUser = null;
-let userLinks = [];
-function login() {
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value.trim();
-  const user = users.find(u => u.email === email && u.password === password);
-  if (!user) {
-    document.getElementById('login-msg').innerText = 'Invalid email or password';
-    return;
+  const firebaseConfig = {
+    apiKey: "AIzaSyBDKDCjXh4FwolYJNjZzs4h1I_43snjGUQ",
+    authDomain: "linkshop-24aca.firebaseapp.com",
+    projectId: "linkshop-24aca",
+    storageBucket: "linkshop-24aca.appspot.com", // ✅ Corrected this line
+    messagingSenderId: "222654104659",
+    appId: "1:222654104659:web:c85e35698a92016c31f2a6",
+    measurementId: "G-950LLBLBFB"
+  };
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  let currentUser = null;
+  let userLinks = [];
+  const admins = ["admin@example.com"];
+
+  function login() {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value.trim();
+    document.getElementById("login-msg").innerText = "";
+
+    auth.signInWithEmailAndPassword(email, password)
+      .then((cred) => {
+        currentUser = cred.user;
+        if (!currentUser.emailVerified) {
+          document.getElementById("login-msg").innerText = "Please verify your email first.";
+          auth.signOut();
+          return;
+        }
+        document.getElementById("login").classList.add("hidden");
+        if (admins.includes(currentUser.email)) {
+          showAdmin();
+        } else {
+          loadUserLinks();
+        }
+      })
+      .catch(err => {
+        document.getElementById("login-msg").innerText = err.message;
+      });
   }
-  currentUser = user;
-  document.getElementById('login').classList.add('hidden');
-  if (user.role === 'admin') showAdmin();
-  else {
-    userLinks = JSON.parse(localStorage.getItem('links_' + user.email)) || [];
-    showUser();
+
+  function loadUserLinks() {
+    db.collection("links")
+      .where("owner", "==", currentUser.email)
+      .get()
+      .then(querySnapshot => {
+        userLinks = [];
+        querySnapshot.forEach(doc => {
+          userLinks.push({ id: doc.id, ...doc.data() });
+        });
+        showUser();
+      });
   }
-}
-function showUser() {
-  document.getElementById('user-panel').classList.remove('hidden');
-  renderLinks();
-}
-function renderLinks() {
-  const container = document.getElementById('links');
-  container.innerHTML = '';
-  userLinks.forEach((link, index) => {
-    const logo = `https://www.google.com/s2/favicons?domain=${new URL(link.url).hostname}`;
-    const div = document.createElement('div');
-    div.className = 'link-card';
-    div.innerHTML = `
-      <img src="${logo}" alt="icon">
-      <div class="info"><a href="${link.url}" target="_blank">${link.title}</a></div>
-      <div class="icons">
-        <button onclick="editLink(${index})">✏️</button>
-        <button onclick="deleteLink(${index})">🗑️</button>
-      </div>
-    `;
-    container.appendChild(div);
-  });
-}
-function addLink() {
-  const title = document.getElementById('link-title').value.trim();
-  const url = document.getElementById('link-url').value.trim();
-  if (!title || !url) return alert('Both fields required');
-  if (userLinks.length >= 10) return alert('Max 10 links allowed');
-  userLinks.push({ title, url });
-  localStorage.setItem('links_' + currentUser.email, JSON.stringify(userLinks));
-  document.getElementById('link-title').value = '';
-  document.getElementById('link-url').value = '';
-  renderLinks();
-}
-function editLink(index) {
-  const newTitle = prompt('Edit Title:', userLinks[index].title);
-  const newUrl = prompt('Edit URL:', userLinks[index].url);
-  if (!newTitle || !newUrl) return;
-  userLinks[index] = { title: newTitle, url: newUrl };
-  localStorage.setItem('links_' + currentUser.email, JSON.stringify(userLinks));
-  renderLinks();
-}
-function deleteLink(index) {
-  if (!confirm('Delete this link?')) return;
-  userLinks.splice(index, 1);
-  localStorage.setItem('links_' + currentUser.email, JSON.stringify(userLinks));
-  renderLinks();
-}
-function logout(showPublic) {
-  document.getElementById('user-panel').classList.add('hidden');
-  document.getElementById('admin-panel').classList.add('hidden');
-  if (showPublic) {
-    renderPublicLinks();
-    document.getElementById('public-panel').classList.remove('hidden');
-  } else {
-    document.getElementById('login').classList.remove('hidden');
+
+  function showUser() {
+    document.getElementById("user-panel").classList.remove("hidden");
+    renderLinks();
   }
-  currentUser = null;
-}
-function renderPublicLinks() {
-  const container = document.getElementById('public-links');
-  container.innerHTML = '';
-  userLinks.forEach(link => {
-    const logo = `https://www.google.com/s2/favicons?domain=${new URL(link.url).hostname}`;
-    const card = document.createElement('div');
-    card.className = 'link-card';
-    card.innerHTML = `
-      <img src="${logo}" alt="logo">
-      <div class="info"><a href="${link.url}" target="_blank">${link.title}</a></div>
-    `;
-    container.appendChild(card);
-  });
-}
-function shareOnWhatsApp() {
-  const text = userLinks.map(link => `${link.title}: ${link.url}`).join('%0A');
-  window.open(`https://wa.me/?text=${text}`, '_blank');
-}
-function showLogin() {
-  document.getElementById('public-panel').classList.add('hidden');
-  document.getElementById('login').classList.remove('hidden');
-}
-function showAdmin() {
-  const adminContent = document.getElementById('admin-content');
-  adminContent.innerHTML = '';
-  users.forEach(user => {
-    if (user.role === 'user') {
-      const links = JSON.parse(localStorage.getItem('links_' + user.email)) || [];
-      links.forEach(link => {
+
+  function renderLinks() {
+    const container = document.getElementById("links");
+    container.innerHTML = "";
+    userLinks.forEach((link) => {
+      const logo = `https://www.google.com/s2/favicons?domain=${new URL(link.url).hostname}`;
+      const div = document.createElement("div");
+      div.className = "link-card";
+      div.innerHTML = `
+        <img src="${logo}" alt="icon" />
+        <div class="info"><a href="${link.url}" target="_blank">${link.title}</a></div>
+        <div class="icons">
+          <button onclick="editLink('${link.id}')">✏️</button>
+          <button onclick="deleteLink('${link.id}')">🗑️</button>
+        </div>
+      `;
+      container.appendChild(div);
+    });
+  }
+
+  function addLink() {
+    const title = document.getElementById("link-title").value.trim();
+    const url = document.getElementById("link-url").value.trim();
+    if (!title || !url) return alert("Both fields required");
+    if (userLinks.length >= 10) return alert("Max 10 links allowed");
+
+    db.collection("links").add({
+      owner: currentUser.email,
+      title: title,
+      url: url
+    }).then(docRef => {
+      userLinks.push({ id: docRef.id, owner: currentUser.email, title, url });
+      document.getElementById("link-title").value = "";
+      document.getElementById("link-url").value = "";
+      renderLinks();
+    });
+  }
+
+  function editLink(id) {
+    const link = userLinks.find(l => l.id === id);
+    if (!link) return alert("Link not found");
+    const newTitle = prompt("Edit Title:", link.title);
+    const newUrl = prompt("Edit URL:", link.url);
+    if (!newTitle || !newUrl) return;
+
+    db.collection("links").doc(id).update({ title: newTitle, url: newUrl })
+      .then(() => {
+        link.title = newTitle;
+        link.url = newUrl;
+        renderLinks();
+      });
+  }
+
+  function deleteLink(id) {
+    if (!confirm("Delete this link?")) return;
+    db.collection("links").doc(id).delete()
+      .then(() => {
+        userLinks = userLinks.filter(l => l.id !== id);
+        renderLinks();
+      });
+  }
+
+  function logout() {
+    auth.signOut().then(() => {
+      currentUser = null;
+      userLinks = [];
+      document.getElementById("user-panel").classList.add("hidden");
+      document.getElementById("admin-panel").classList.add("hidden");
+      document.getElementById("public-panel").classList.add("hidden");
+      document.getElementById("login").classList.remove("hidden");
+    });
+  }
+
+  function showAdmin() {
+    const adminContent = document.getElementById("admin-content");
+    adminContent.innerHTML = "";
+    document.getElementById("admin-panel").classList.remove("hidden");
+
+    db.collection("links").get().then(snapshot => {
+      snapshot.forEach(doc => {
+        const link = doc.data();
         const logo = `https://www.google.com/s2/favicons?domain=${new URL(link.url).hostname}`;
-        const div = document.createElement('div');
-        div.className = 'link-card';
+        const div = document.createElement("div");
+        div.className = "link-card";
         div.innerHTML = `
-          <img src="${logo}" alt="logo">
-          <div class="info"><strong>${user.email}</strong><br>
-          <a href="${link.url}" target="_blank">${link.title}</a></div>
+          <img src="${logo}" alt="logo" />
+          <div class="info"><strong>${link.owner}</strong><br/>
+            <a href="${link.url}" target="_blank">${link.title}</a>
+          </div>
           <div class="icons">
-            <button onclick="deleteUserLink('${user.email}', '${link.url}')">🗑️</button>
+            <button onclick="deleteUserLink('${doc.id}')">🗑️</button>
           </div>
         `;
         adminContent.appendChild(div);
       });
+    });
+  }
+
+  function deleteUserLink(id) {
+    if (!confirm("Delete this link?")) return;
+    db.collection("links").doc(id).delete()
+      .then(() => {
+        showAdmin();
+      });
+  }
+
+  function renderPublicLinks() {
+    const container = document.getElementById("public-links");
+    container.innerHTML = "";
+    userLinks.forEach(link => {
+      const logo = `https://www.google.com/s2/favicons?domain=${new URL(link.url).hostname}`;
+      const card = document.createElement("div");
+      card.className = "link-card";
+      card.innerHTML = `
+        <img src="${logo}" alt="logo" />
+        <div class="info"><a href="${link.url}" target="_blank">${link.title}</a></div>
+      `;
+      container.appendChild(card);
+    });
+  }
+
+  function shareOnWhatsApp() {
+    const text = userLinks.map(link => `${link.title}: ${link.url}`).join("%0A");
+    window.open(`https://wa.me/?text=${text}`, "_blank");
+  }
+
+  function showLogin() {
+    document.getElementById("public-panel").classList.add("hidden");
+    document.getElementById("login").classList.remove("hidden");
+  }
+
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      currentUser = user;
+      if (admins.includes(user.email)) {
+        showAdmin();
+      } else {
+        loadUserLinks();
+      }
+    } else {
+      currentUser = null;
+      userLinks = [];
+      document.getElementById("login").classList.remove("hidden");
+      document.getElementById("user-panel").classList.add("hidden");
+      document.getElementById("admin-panel").classList.add("hidden");
+      document.getElementById("public-panel").classList.add("hidden");
     }
   });
-  document.getElementById('admin-panel').classList.remove('hidden');
-}
-function deleteUserLink(email, url) {
-  const links = JSON.parse(localStorage.getItem('links_' + email)) || [];
-  const updated = links.filter(link => link.url !== url);
-  localStorage.setItem('links_' + email, JSON.stringify(updated));
-  showAdmin();
-}
 </script>
 </body>
 </html>
