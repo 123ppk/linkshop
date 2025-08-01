@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OneLink Shop</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f4f7fa; }
+    header { background: #111; color: white; padding: 1rem; text-align: center; font-size: 1.6rem; letter-spacing: 1px; }
+    .container { max-width: 700px; margin: 2rem auto; background: #fff; border-radius: 10px; padding: 2rem; box-shadow: 0 0 12px rgba(0,0,0,0.1); }
+    input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 5px; border: 1px solid #ccc; font-size: 16px; }
+    button { background: #3498db; color: white; border: none; cursor: pointer; }
+    button:hover { background: #2980b9; }
+    .link-card { display: flex; align-items: center; padding: 12px; margin: 10px 0; border-radius: 8px; background: #fff; border: 1px solid #ddd; }
+    .link-card img { width: 32px; height: 32px; margin-right: 12px; }
+    .link-card .info { flex-grow: 1; }
+    .link-card a { color: #007bff; font-weight: bold; text-decoration: none; }
+    .icons button { background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 8px; }
+    .hidden { display: none; }
+    #whatsapp-share-btn { background: #25D366; color: white; margin-top: 15px; padding: 12px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+  </style>
+</head>
+<body>
+<header>OneLink Shop</header>
+<div class="container">
+  <div id="login">
+    <h2>Login</h2>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="login()">Login</button>
+    <p id="login-msg" style="color:red;"></p>
+  </div>
+  <div id="user-panel" class="hidden">
+    <h2>Your Links</h2>
+    <input type="text" id="link-title" placeholder="Link Title">
+    <input type="url" id="link-url" placeholder="https://example.com">
+    <button onclick="addLink()">Add Link</button>
+    <div id="links"></div>
+    <button onclick="logout(true)">Logout</button>
+  </div>
+  <div id="admin-panel" class="hidden">
+    <h2>Admin Panel</h2>
+    <div id="admin-content"></div>
+    <button onclick="logout(false)">Logout</button>
+  </div>
+  <div id="public-panel" class="hidden">
+    <h2>Public Linktree</h2>
+    <div id="public-links"></div>
+    <button id="whatsapp-share-btn" onclick="shareOnWhatsApp()">📤 Share on WhatsApp</button>
+    <button onclick="showLogin()">Back to Login</button>
+  </div>
+</div>
+<script>
+const users = [
+  { email: 'user1@example.com', password: 'user123', role: 'user' },
+  { email: 'admin@example.com', password: 'admin123', role: 'admin' }
+];
+let currentUser = null;
+let userLinks = [];
+function login() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value.trim();
+  const user = users.find(u => u.email === email && u.password === password);
+  if (!user) {
+    document.getElementById('login-msg').innerText = 'Invalid email or password';
+    return;
+  }
+  currentUser = user;
+  document.getElementById('login').classList.add('hidden');
+  if (user.role === 'admin') showAdmin();
+  else {
+    userLinks = JSON.parse(localStorage.getItem('links_' + user.email)) || [];
+    showUser();
+  }
+}
+function showUser() {
+  document.getElementById('user-panel').classList.remove('hidden');
+  renderLinks();
+}
+function renderLinks() {
+  const container = document.getElementById('links');
+  container.innerHTML = '';
+  userLinks.forEach((link, index) => {
+    const logo = `https://www.google.com/s2/favicons?domain=${new URL(link.url).hostname}`;
+    const div = document.createElement('div');
+    div.className = 'link-card';
+    div.innerHTML = `
+      <img src="${logo}" alt="icon">
+      <div class="info"><a href="${link.url}" target="_blank">${link.title}</a></div>
+      <div class="icons">
+        <button onclick="editLink(${index})">✏️</button>
+        <button onclick="deleteLink(${index})">🗑️</button>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+function addLink() {
+  const title = document.getElementById('link-title').value.trim();
+  const url = document.getElementById('link-url').value.trim();
+  if (!title || !url) return alert('Both fields required');
+  if (userLinks.length >= 10) return alert('Max 10 links allowed');
+  userLinks.push({ title, url });
+  localStorage.setItem('links_' + currentUser.email, JSON.stringify(userLinks));
+  document.getElementById('link-title').value = '';
+  document.getElementById('link-url').value = '';
+  renderLinks();
+}
+function editLink(index) {
+  const newTitle = prompt('Edit Title:', userLinks[index].title);
+  const newUrl = prompt('Edit URL:', userLinks[index].url);
+  if (!newTitle || !newUrl) return;
+  userLinks[index] = { title: newTitle, url: newUrl };
+  localStorage.setItem('links_' + currentUser.email, JSON.stringify(userLinks));
+  renderLinks();
+}
+function deleteLink(index) {
+  if (!confirm('Delete this link?')) return;
+  userLinks.splice(index, 1);
+  localStorage.setItem('links_' + currentUser.email, JSON.stringify(userLinks));
+  renderLinks();
+}
+function logout(showPublic) {
+  document.getElementById('user-panel').classList.add('hidden');
+  document.getElementById('admin-panel').classList.add('hidden');
+  if (showPublic) {
+    renderPublicLinks();
+    document.getElementById('public-panel').classList.remove('hidden');
+  } else {
+    document.getElementById('login').classList.remove('hidden');
+  }
+  currentUser = null;
+}
+function renderPublicLinks() {
+  const container = document.getElementById('public-links');
+  container.innerHTML = '';
+  userLinks.forEach(link => {
+    const logo = `https://www.google.com/s2/favicons?domain=${new URL(link.url).hostname}`;
+    const card = document.createElement('div');
+    card.className = 'link-card';
+    card.innerHTML = `
+      <img src="${logo}" alt="logo">
+      <div class="info"><a href="${link.url}" target="_blank">${link.title}</a></div>
+    `;
+    container.appendChild(card);
+  });
+}
+function shareOnWhatsApp() {
+  const text = userLinks.map(link => `${link.title}: ${link.url}`).join('%0A');
+  window.open(`https://wa.me/?text=${text}`, '_blank');
+}
+function showLogin() {
+  document.getElementById('public-panel').classList.add('hidden');
+  document.getElementById('login').classList.remove('hidden');
+}
+function showAdmin() {
+  const adminContent = document.getElementById('admin-content');
+  adminContent.innerHTML = '';
+  users.forEach(user => {
+    if (user.role === 'user') {
+      const links = JSON.parse(localStorage.getItem('links_' + user.email)) || [];
+      links.forEach(link => {
+        const logo = `https://www.google.com/s2/favicons?domain=${new URL(link.url).hostname}`;
+        const div = document.createElement('div');
+        div.className = 'link-card';
+        div.innerHTML = `
+          <img src="${logo}" alt="logo">
+          <div class="info"><strong>${user.email}</strong><br>
+          <a href="${link.url}" target="_blank">${link.title}</a></div>
+          <div class="icons">
+            <button onclick="deleteUserLink('${user.email}', '${link.url}')">🗑️</button>
+          </div>
+        `;
+        adminContent.appendChild(div);
+      });
+    }
+  });
+  document.getElementById('admin-panel').classList.remove('hidden');
+}
+function deleteUserLink(email, url) {
+  const links = JSON.parse(localStorage.getItem('links_' + email)) || [];
+  const updated = links.filter(link => link.url !== url);
+  localStorage.setItem('links_' + email, JSON.stringify(updated));
+  showAdmin();
+}
+</script>
+</body>
+</html>
